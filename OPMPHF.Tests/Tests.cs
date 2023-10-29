@@ -16,7 +16,7 @@ public class Tests
 
         var keys = new List<string>
         {
-            "body", "cat", "dog", "flower", "house", "mouse", "sun", "tree", "zoo"
+            "abacus", "cat", "dog", "flop", "home", "house", "son", "trip", "zoo"
         };
 
         var hashFunction = new OrderPreservingMinimalPerfectHash(keys, m, new[]
