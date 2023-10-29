@@ -19,11 +19,13 @@ public class Tests
             "abacus", "cat", "dog", "flop", "home", "house", "son", "trip", "zoo"
         };
 
-        var hashFunction = new OrderPreservingMinimalPerfectHash(keys, m, new[]
+        var hashFunction = new OrderPreservingMinimalPerfectHash(m, new[]
         {
             ExampleRandomHashFunction(keys, new[] { 1, 7, 5, 4, 1, 0, 8, 11, 5 }),
             ExampleRandomHashFunction(keys, new[] { 6, 2, 7, 6, 10, 1, 11, 9, 3 })
         });
+
+        hashFunction.Construct(keys);
 
         foreach (var key in keys)
         {
