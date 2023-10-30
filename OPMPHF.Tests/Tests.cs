@@ -65,13 +65,13 @@ public class Tests
         var keys = Enumerable.Range(0, 10).Select(i => $"key{i}").ToList();
         var m = keys.Count + 5;
         var opmph = new OrderPreservingMinimalPerfectHash(m, int.MaxValue);
-        var (validSeed, numNodes, numEdges, g) = opmph.Construct(keys);
+        var (numNodes, numKeys, validSeed, g) = opmph.Construct(keys);
         AssertHashFunction(keys, opmph.Hash);
 
         Assert.AreEqual(m, g.Length);
 
         var newOpmph = new OrderPreservingMinimalPerfectHash(numNodes);
-        newOpmph.Import(validSeed, numEdges, g);
+        newOpmph.Import(numKeys, validSeed, g);
         AssertHashFunction(keys, newOpmph.Hash);
     }
 

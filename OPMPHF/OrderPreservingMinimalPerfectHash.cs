@@ -3,17 +3,19 @@ using System.Text;
 
 namespace OPMPHF;
 
+using rndHashFunc = Func<string, int, int>;
+
 public class OrderPreservingMinimalPerfectHash
 {
     private readonly int _maxSeed;
-    private readonly IList<Func<string, int, int>> _rndHashFuncs;
+    private readonly IList<rndHashFunc> _rndHashFuncs;
     private int[] _g = Array.Empty<int>();
     private UndirectedGraph _graph = new(0);
-    private int _numEdges;
+    private int _numKeys;
     private int _numNodes;
     private int _validSeed;
 
-    public OrderPreservingMinimalPerfectHash(int numNodes, int maxSeed = 1000, IList<Func<string, int, int>>? rndHashFuncs = null)
+    public OrderPreservingMinimalPerfectHash(int numNodes, int maxSeed = 1000, IList<rndHashFunc>? rndHashFuncs = null)
     {
         _numNodes = numNodes;
         _maxSeed = maxSeed;
@@ -21,7 +23,7 @@ public class OrderPreservingMinimalPerfectHash
         if (rndHashFuncs != null)
             _rndHashFuncs = rndHashFuncs;
         else
-            _rndHashFuncs = new List<Func<string, int, int>>
+            _rndHashFuncs = new List<rndHashFunc>
             {
                 (key, seed) => ConvertSha256ToInt32(key, seed + 1),
                 (key, seed) => ConvertSha256ToInt32(key, seed + 2)
@@ -36,14 +38,14 @@ public class OrderPreservingMinimalPerfectHash
         return BitConverter.ToInt32(hashBytes, 0);
     }
 
-    public void Import(int validSeed, int numEdges, int[] g)
+    public void Import(int numKeys, int validSeed, int[] g)
     {
+        _numKeys = numKeys;
         _validSeed = validSeed;
-        _numEdges = numEdges;
         _g = g;
     }
 
-    public (int validSeed, int numNodes, int numEdges, int[] g) Construct(List<string> keys)
+    public (int numNodes, int numKeys, int validSeed, int[] g) Construct(List<string> keys)
     {
         var seedFound = false;
 
@@ -72,12 +74,12 @@ public class OrderPreservingMinimalPerfectHash
 
         LabelAcyclicGraph();
 
-        _validSeed = seed - 1;
-        _numEdges = _graph.NumEdges;
         _numNodes = _graph.Nodes.Count;
+        _numKeys = _graph.NumEdges;
+        _validSeed = seed - 1;
         _g = _graph.Nodes.Select(x => x.Label!.Value).ToArray();
 
-        return (_validSeed, _numNodes, _numEdges, _g);
+        return (_numNodes, _numKeys, _validSeed, _g);
     }
 
     private void Label(int nodeIdx, int label)
@@ -95,8 +97,7 @@ public class OrderPreservingMinimalPerfectHash
                 continue;
 
             var rank = _graph.GetEdgeLabel((nodeIdx, neighborIdx));
-            var n = _graph.NumEdges;
-            Label(neighborIdx, Mod(rank - label, n));
+            Label(neighborIdx, Mod(rank - label, _graph.NumEdges));
         }
     }
 
@@ -114,10 +115,10 @@ public class OrderPreservingMinimalPerfectHash
             .Select(hashKey => _g[hashKey])
             .Sum();
 
-        return sum % _numEdges;
+        return sum % _numKeys;
     }
 
-    private int InternalHash(Func<string, int, int> hashFunc, string key, int seed)
+    private int InternalHash(rndHashFunc hashFunc, string key, int seed)
     {
         return Mod(hashFunc(key, seed), _numNodes);
     }
