@@ -14,16 +14,13 @@ public class UndirectedGraph
 
     public int NumEdges => _edges.Count;
 
-    public void Reset()
+    private void ResetVisited()
     {
         foreach (var n in Nodes)
-        {
-            n.NeighborIndices.Clear();
-        }
-        _edges.Clear();
+            n.Visited = false;
     }
-    
-    public bool AddEdge((int v, int w) edge, int weight)
+
+    public bool AddEdge((int v, int w) edge, int label)
     {
         var (v, w) = edge;
 
@@ -33,7 +30,7 @@ public class UndirectedGraph
         Nodes[v].NeighborIndices.Add(w);
         Nodes[w].NeighborIndices.Add(v);
 
-        return _edges.TryAdd(ReorderEdge(edge), weight);
+        return _edges.TryAdd(ReorderEdge(edge), label);
     }
 
     private static (int, int) ReorderEdge((int v, int w) edge)
@@ -49,12 +46,39 @@ public class UndirectedGraph
         return Nodes[v].NeighborIndices;
     }
 
-    public int GetEdgeWeight((int v, int w) edge)
+    public int GetEdgeLabel((int v, int w) edge)
     {
-        if (_edges.TryGetValue(ReorderEdge(edge), out var value)) 
+        if (_edges.TryGetValue(ReorderEdge(edge), out var value))
             return value;
 
         throw new ArgumentException("Edge not found.");
+    }
+
+    public bool IsAcyclic()
+    {
+        var rv = Nodes.Where(node => !node.Visited).All(node => !IsAcyclicDfs(node, null));
+        ResetVisited();
+        return rv;
+    }
+
+    private bool IsAcyclicDfs(Node current, Node? parent)
+    {
+        current.Visited = true;
+
+        foreach (var neighborIndex in current.NeighborIndices)
+            if (!Nodes[neighborIndex].Visited)
+            {
+                if (IsAcyclicDfs(Nodes[neighborIndex], current))
+                    return true;
+            }
+            else if (Nodes[neighborIndex] != parent)
+            {
+                // If the neighbor has been visited and
+                // is not the parent, it's a back edge, indicating a cycle.
+                return true;
+            }
+
+        return false;
     }
 
     public class Node

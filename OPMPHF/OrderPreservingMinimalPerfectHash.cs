@@ -1,81 +1,86 @@
-﻿using System.Diagnostics;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 
 namespace OPMPHF;
 
 public class OrderPreservingMinimalPerfectHash
 {
-    private readonly UndirectedGraph _graph;
-    private readonly IList<Func<string, int>> _rndHashFuncs;
+    private readonly int _maxSeed;
+    private readonly IList<Func<string, int, int>> _rndHashFuncs;
+    private int[] _g = Array.Empty<int>();
+    private UndirectedGraph _graph = new(0);
+    private int _numEdges;
+    private int _numNodes;
+    private int _validSeed;
 
-    private static int Djbx33AHash(string key, int start)
+    public OrderPreservingMinimalPerfectHash(int numNodes, int maxSeed = 1000, IList<Func<string, int, int>>? rndHashFuncs = null)
     {
-        return key.Aggregate(start, (current, character) => (current << 5) + current + character);
-    }
-    
-    public static int ConvertSHA256ToInt32(string input, int seed)
-    {
-        using (SHA256 sha256 = SHA256.Create())
-        {
-            byte[] hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(seed + input));
-
-            // Take the first 4 bytes (32 bits) and convert them to an int.
-            int result = BitConverter.ToInt32(hashBytes, 0);
-
-            return result;
-        }
-    }
-    
-    public OrderPreservingMinimalPerfectHash(int numNodes, IList<Func<string, int>>? rndHashFuncs = null)
-    {
-        _graph = new UndirectedGraph(numNodes);
+        _numNodes = numNodes;
+        _maxSeed = maxSeed;
 
         if (rndHashFuncs != null)
             _rndHashFuncs = rndHashFuncs;
         else
-            _rndHashFuncs = new List<Func<string, int>>
+            _rndHashFuncs = new List<Func<string, int, int>>
             {
-                key => ConvertSHA256ToInt32(key, 2556),
-                key => ConvertSHA256ToInt32(key, 3424),
+                (key, seed) => ConvertSha256ToInt32(key, seed + 1),
+                (key, seed) => ConvertSha256ToInt32(key, seed + 2)
             };
     }
 
-    public void Construct(List<string> keys)
+    private static int ConvertSha256ToInt32(string input, int seed)
     {
-        var success = false;
-        var seed = 0;
-        for (; success == false && seed < 9999; seed++)
-        {
-            _graph.Reset();
-            foreach (var key in keys)
-            {
-                var h1T = InternalHash(_rndHashFuncs[0], (seed == 0 ? "" : seed) + key);
-                var h2T = InternalHash(_rndHashFuncs[1], (seed == 0 ? "" : seed) + key);
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(seed + input));
 
-                var desiredHash = keys.IndexOf(key);
-                if (h1T == h2T)
-                {
-                    success = false;
-                    break;
-                }
-                success = _graph.AddEdge((h1T, h2T), desiredHash);
-                if (!success)
-                {
-                    Trace.WriteLine((h1T, h2T));
-                    break;
-                }
-                   
-            }
-        }
-
-        if (success == false)
-            throw new Exception("Cannot construct perfect hash function");
-
-        LabelAcyclicGraph();
+        // Take the first 4 bytes (32 bits) and convert them to an int.
+        return BitConverter.ToInt32(hashBytes, 0);
     }
 
-    private void LabelFrom(int nodeIdx, int label)
+    public void Import(int validSeed, int numEdges, int[] g)
+    {
+        _validSeed = validSeed;
+        _numEdges = numEdges;
+        _g = g;
+    }
+
+    public (int validSeed, int numNodes, int numEdges, int[] g) Construct(List<string> keys)
+    {
+        var seedFound = false;
+
+        var seed = 0;
+        for (; seedFound == false && seed < _maxSeed; seed++)
+        {
+            _graph = new UndirectedGraph(_numNodes);
+            foreach (var key in keys)
+            {
+                var h1T = InternalHash(_rndHashFuncs[0], key, seed);
+                var h2T = InternalHash(_rndHashFuncs[1], key, seed);
+
+                var rank = keys.IndexOf(key);
+                if (h1T == h2T || _graph.AddEdge((h1T, h2T), rank) == false)
+                    break;
+            }
+
+            if (_graph.NumEdges < keys.Count)
+                continue;
+
+            seedFound = _graph.IsAcyclic();
+        }
+
+        if (seedFound == false)
+            throw new Exception($"Cannot construct perfect hash function after trying {_maxSeed} seeds");
+
+        LabelAcyclicGraph();
+
+        _validSeed = seed - 1;
+        _numEdges = _graph.NumEdges;
+        _numNodes = _graph.Nodes.Count;
+        _g = _graph.Nodes.Select(x => x.Label!.Value).ToArray();
+
+        return (_validSeed, _numNodes, _numEdges, _g);
+    }
+
+    private void Label(int nodeIdx, int label)
     {
         var node = _graph.Nodes[nodeIdx];
         if (node.Visited && node.Label != label)
@@ -89,9 +94,9 @@ public class OrderPreservingMinimalPerfectHash
             if (_graph.Nodes[neighborIdx].Visited)
                 continue;
 
-            var desiredHash = _graph.GetEdgeWeight((nodeIdx, neighborIdx));
+            var rank = _graph.GetEdgeLabel((nodeIdx, neighborIdx));
             var n = _graph.NumEdges;
-            LabelFrom(neighborIdx, (desiredHash - label + n) % n);
+            Label(neighborIdx, Mod(rank - label, n));
         }
     }
 
@@ -99,21 +104,26 @@ public class OrderPreservingMinimalPerfectHash
     {
         for (var nodeIdx = 0; nodeIdx < _graph.Nodes.Count; nodeIdx++)
             if (_graph.Nodes[nodeIdx].Visited == false)
-                LabelFrom(nodeIdx, 0);
+                Label(nodeIdx, 0);
     }
 
     public int Hash(string key)
     {
-        return _rndHashFuncs.Sum(h => _graph.Nodes[InternalHash(h,key)].Label!.Value) % _graph.NumEdges;
+        var sum = _rndHashFuncs
+            .Select(hashFunc => InternalHash(hashFunc, key, _validSeed))
+            .Select(hashKey => _g[hashKey])
+            .Sum();
+
+        return sum % _numEdges;
     }
 
-    private int InternalHash(Func<string, int> hashFunc, string key)
+    private int InternalHash(Func<string, int, int> hashFunc, string key, int seed)
     {
-        return Mod(hashFunc(key), _graph.Nodes.Count);
+        return Mod(hashFunc(key, seed), _numNodes);
     }
 
     private static int Mod(int k, int n)
     {
-        return (k %= n) < 0 ? k+n : k;
+        return (k %= n) < 0 ? k + n : k;
     }
 }
