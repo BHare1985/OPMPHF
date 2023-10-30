@@ -14,7 +14,16 @@ public class UndirectedGraph
 
     public int NumEdges => _edges.Count;
 
-    public void AddEdge((int v, int w) edge, int weight)
+    public void Reset()
+    {
+        foreach (var n in Nodes)
+        {
+            n.NeighborIndices.Clear();
+        }
+        _edges.Clear();
+    }
+    
+    public bool AddEdge((int v, int w) edge, int weight)
     {
         var (v, w) = edge;
 
@@ -24,7 +33,7 @@ public class UndirectedGraph
         Nodes[v].NeighborIndices.Add(w);
         Nodes[w].NeighborIndices.Add(v);
 
-        _edges[ReorderEdge(edge)] = weight;
+        return _edges.TryAdd(ReorderEdge(edge), weight);
     }
 
     private static (int, int) ReorderEdge((int v, int w) edge)
@@ -42,7 +51,8 @@ public class UndirectedGraph
 
     public int GetEdgeWeight((int v, int w) edge)
     {
-        if (_edges.TryGetValue(ReorderEdge(edge), out var value)) return value;
+        if (_edges.TryGetValue(ReorderEdge(edge), out var value)) 
+            return value;
 
         throw new ArgumentException("Edge not found.");
     }
@@ -52,6 +62,6 @@ public class UndirectedGraph
         internal readonly ISet<int> NeighborIndices = new HashSet<int>();
 
         public bool Visited { get; set; }
-        public int Label { get; set; }
+        public int? Label { get; set; }
     }
 }

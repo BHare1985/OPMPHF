@@ -19,19 +19,26 @@ public class Tests
             "abacus", "cat", "dog", "flop", "home", "house", "son", "trip", "zoo"
         };
 
-        var hashFunction = new OrderPreservingMinimalPerfectHash(m, new[]
+        var hashFunction2 = new OrderPreservingMinimalPerfectHash(m, new[]
         {
             ExampleRandomHashFunction(keys, new[] { 1, 7, 5, 4, 1, 0, 8, 11, 5 }),
             ExampleRandomHashFunction(keys, new[] { 6, 2, 7, 6, 10, 1, 11, 9, 3 })
         });
 
+        var hashFunction = new OrderPreservingMinimalPerfectHash(m);
         hashFunction.Construct(keys);
 
+        
+        var expectedHashes = new List<int>();
+        var actualHashes = new List<int>();
         foreach (var key in keys)
         {
             var hash = hashFunction.Hash(key);
+            expectedHashes.Add(keys.IndexOf(key));
+            actualHashes.Add(hash);
             Console.WriteLine($"h({key}) = " + hash);
-            Assert.That(hash, Is.EqualTo(keys.IndexOf(key)));
         }
+        
+        CollectionAssert.AreEqual(actualHashes, expectedHashes);
     }
 }
